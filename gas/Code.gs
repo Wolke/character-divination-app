@@ -1,10 +1,12 @@
 /**
- * 測字大師 - GAS 網頁應用程式
- * GAS 提供前端網頁 + 呼叫 Gemini Vision API
+ * 測字大師 - GAS 網頁應用程式 + LINE Bot Webhook
+ * GAS 提供前端網頁 + 呼叫 Gemini Vision API + LINE Bot
  */
 
 // ====== 設定區 ======
 const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || 'YOUR_GEMINI_API_KEY';
+const LINE_CHANNEL_ACCESS_TOKEN = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN') || 'YOUR_LINE_CHANNEL_ACCESS_TOKEN';
+const LIFF_URL = PropertiesService.getScriptProperties().getProperty('LIFF_URL') || 'https://liff.line.me/YOUR_LIFF_ID';
 
 // ====== 網頁進入點 ======
 
@@ -19,24 +21,204 @@ function doGet() {
 }
 
 /**
- * POST 請求 - 供外部 LIFF 呼叫
+ * POST 請求 - 處理 LIFF API 呼叫 & LINE Webhook
  */
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    const { question, imageBase64 } = data;
     
-    if (!question || !imageBase64) {
-      return createJsonResponse({ success: false, error: '請提供問題和圖片' });
+    // 判斷是 LINE Webhook 還是 LIFF API 呼叫
+    if (data.events) {
+      // LINE Webhook
+      return handleLineWebhook(data.events);
+    } else {
+      // LIFF API 呼叫
+      return handleLiffRequest(data);
     }
     
-    const interpretation = callGeminiVision(question, imageBase64);
-    return createJsonResponse({ success: true, interpretation: interpretation });
-    
   } catch (error) {
-    console.error('Error:', error);
+    console.error('doPost Error:', error);
     return createJsonResponse({ success: false, error: error.message });
   }
+}
+
+// ====== LINE Webhook 處理 ======
+
+function handleLineWebhook(events) {
+  events.forEach(event => {
+    if (event.type === 'message') {
+      handleMessageEvent(event);
+    } else if (event.type === 'follow') {
+      handleFollowEvent(event);
+    }
+  });
+  
+  return ContentService.createTextOutput('OK');
+}
+
+function handleMessageEvent(event) {
+  const replyToken = event.replyToken;
+  const message = event.message;
+  
+  if (message.type === 'text') {
+    // 使用者發送文字訊息
+    const userText = message.text.toLowerCase();
+    
+    if (userText.includes('測字') || userText.includes('占卜') || userText.includes('算命')) {
+      // 引導到 LIFF
+      replyWithLiffLink(replyToken);
+    } else {
+      // 一般訊息：引導使用
+      replyWithWelcome(replyToken);
+    }
+  } else if (message.type === 'image') {
+    // 使用者發送圖片：引導到 LIFF（因為需要問題）
+    replyWithNeedQuestion(replyToken);
+  }
+}
+
+function handleFollowEvent(event) {
+  const replyToken = event.replyToken;
+  replyWithWelcome(replyToken);
+}
+
+// ====== LINE Reply Functions ======
+
+function replyWithLiffLink(replyToken) {
+  const messages = [{
+    type: 'flex',
+    altText: '🔮 測字大師 - 開始占卜',
+    contents: {
+      type: 'bubble',
+      hero: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [{
+          type: 'text',
+          text: '🔮',
+          size: '4xl',
+          align: 'center'
+        }],
+        paddingAll: '20px',
+        backgroundColor: '#1a0a2e'
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: '測字大師',
+            weight: 'bold',
+            size: 'xl',
+            align: 'center',
+            color: '#fbbf24'
+          },
+          {
+            type: 'text',
+            text: '心誠則靈，字現天機',
+            size: 'sm',
+            align: 'center',
+            color: '#9ca3af',
+            margin: 'sm'
+          },
+          {
+            type: 'text',
+            text: '輸入問題 → 手寫一字 → AI 為您拆字解讀',
+            size: 'xs',
+            align: 'center',
+            color: '#6b7280',
+            margin: 'lg',
+            wrap: true
+          }
+        ],
+        backgroundColor: '#0f0a1a',
+        paddingAll: '20px'
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [{
+          type: 'button',
+          action: {
+            type: 'uri',
+            label: '開始測字',
+            uri: LIFF_URL
+          },
+          style: 'primary',
+          color: '#8b5cf6'
+        }],
+        backgroundColor: '#0f0a1a',
+        paddingAll: '15px'
+      }
+    }
+  }];
+  
+  replyMessage(replyToken, messages);
+}
+
+function replyWithWelcome(replyToken) {
+  const messages = [
+    {
+      type: 'text',
+      text: '🔮 歡迎來到測字大師！\n\n我可以透過「拆字」幫您解讀命運與問題。\n\n📝 使用方式：\n輸入「測字」即可開始占卜\n\n💡 小提示：\n誠心發問，答案自現。'
+    }
+  ];
+  
+  replyMessage(replyToken, messages);
+}
+
+function replyWithNeedQuestion(replyToken) {
+  const messages = [{
+    type: 'text',
+    text: '📷 收到您的圖片了！\n\n不過測字需要您先說明「想問什麼問題」，這樣才能針對問題解讀。\n\n請點選下方按鈕開始完整的測字流程：'
+  }, {
+    type: 'template',
+    altText: '開始測字',
+    template: {
+      type: 'buttons',
+      text: '使用測字大師',
+      actions: [{
+        type: 'uri',
+        label: '開始測字',
+        uri: LIFF_URL
+      }]
+    }
+  }];
+  
+  replyMessage(replyToken, messages);
+}
+
+function replyMessage(replyToken, messages) {
+  const url = 'https://api.line.me/v2/bot/message/reply';
+  
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+    },
+    payload: JSON.stringify({
+      replyToken: replyToken,
+      messages: messages
+    }),
+    muteHttpExceptions: true
+  };
+  
+  UrlFetchApp.fetch(url, options);
+}
+
+// ====== LIFF API 處理 ======
+
+function handleLiffRequest(data) {
+  const { question, imageBase64 } = data;
+  
+  if (!question || !imageBase64) {
+    return createJsonResponse({ success: false, error: '請提供問題和圖片' });
+  }
+  
+  const interpretation = callGeminiVision(question, imageBase64);
+  return createJsonResponse({ success: true, interpretation: interpretation });
 }
 
 function createJsonResponse(data) {
