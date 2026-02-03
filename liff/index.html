@@ -401,6 +401,11 @@
                     <button id="btnRestart" class="btn btn-secondary">再問一題</button>
                 </div>
             </section>
+
+            <!-- Test Button -->
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+                <button id="btnTestSend" class="btn btn-secondary" style="background: #ff6b6b;">🧪 測試：發送訊息到聊天室</button>
+            </div>
         </div>
     </div>
 
@@ -640,6 +645,33 @@
             questionEl.value = '';
             btnNext.disabled = true;
             showStep(1);
+        });
+
+        // ====== TEST BUTTON ======
+        document.getElementById('btnTestSend').addEventListener('click', async () => {
+            const btn = document.getElementById('btnTestSend');
+            btn.disabled = true;
+            btn.textContent = '發送中...';
+
+            try {
+                if (!liff.isInClient()) {
+                    alert('此功能只能在 LINE App 內使用');
+                    return;
+                }
+
+                await liff.sendMessages([{
+                    type: 'text',
+                    text: '🔮 測字大師測試訊息\n\n這是一則來自 LIFF 的測試訊息！\n\n功能正常運作中 ✅'
+                }]);
+
+                alert('訊息已發送到聊天室！');
+            } catch (err) {
+                console.error('Send message error:', err);
+                alert('發送失敗：' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🧪 測試：發送訊息到聊天室';
+            }
         });
 
         // ====== INIT ======
