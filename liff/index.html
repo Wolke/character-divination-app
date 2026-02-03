@@ -660,16 +660,28 @@
                         footer: {
                             type: 'box',
                             layout: 'vertical',
-                            contents: [{
-                                type: 'button',
-                                action: {
-                                    type: 'uri',
-                                    label: '我也要測字',
-                                    uri: `https://liff.line.me/${CONFIG.LIFF_ID}`
+                            contents: [
+                                {
+                                    type: 'button',
+                                    action: {
+                                        type: 'uri',
+                                        label: '我也要測字',
+                                        uri: `https://liff.line.me/${CONFIG.LIFF_ID}`
+                                    },
+                                    style: 'primary',
+                                    color: '#8b5cf6'
                                 },
-                                style: 'primary',
-                                color: '#8b5cf6'
-                            }],
+                                {
+                                    type: 'button',
+                                    action: {
+                                        type: 'uri',
+                                        label: '➕ 加入測字大師好友',
+                                        uri: 'https://line.me/R/ti/p/@145yhtov'
+                                    },
+                                    style: 'secondary',
+                                    margin: 'sm'
+                                }
+                            ],
                             backgroundColor: '#0f0a1a',
                             paddingAll: '15px'
                         }
@@ -701,15 +713,15 @@
                     scale: 2,
                     useCORS: true
                 });
-                
+
                 // 轉換成 Blob
-                const blob = await new Promise(resolve => 
+                const blob = await new Promise(resolve =>
                     screenshotCanvas.toBlob(resolve, 'image/png')
                 );
                 const file = new File([blob], '測字結果.png', { type: 'image/png' });
-                
+
                 btnShare.textContent = '分享中...';
-                
+
                 // 優先使用 Web Share API（支援直接分享圖片檔案）
                 if (navigator.canShare && navigator.canShare({ files: [file] })) {
                     await navigator.share({

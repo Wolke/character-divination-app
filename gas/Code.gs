@@ -138,16 +138,28 @@ function replyWithLiffLink(replyToken) {
       footer: {
         type: 'box',
         layout: 'vertical',
-        contents: [{
-          type: 'button',
-          action: {
-            type: 'uri',
-            label: '開始測字',
-            uri: LIFF_URL
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'uri',
+              label: '開始測字',
+              uri: LIFF_URL
+            },
+            style: 'primary',
+            color: '#8b5cf6'
           },
-          style: 'primary',
-          color: '#8b5cf6'
-        }],
+          {
+            type: 'button',
+            action: {
+              type: 'uri',
+              label: '➕ 加入好友',
+              uri: 'https://line.me/R/ti/p/@145yhtov'
+            },
+            style: 'secondary',
+            margin: 'sm'
+          }
+        ],
         backgroundColor: '#0f0a1a',
         paddingAll: '15px'
       }
