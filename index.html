@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="測字占卜 - 輸入問題，手寫一字，AI 為您拆字解讀">
+    <title>測字大師</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <!-- LIFF SDK -->
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>🔮 測字大師</h1>
+            <p class="tagline">心誠則靈，字現天機</p>
+        </header>
+
+        <!-- Step 1: Question Input -->
+        <section id="step-question" class="step active">
+            <div class="step-header">
+                <span class="step-number">一</span>
+                <h2>您想問什麼？</h2>
+            </div>
+            <div class="step-content">
+                <textarea id="user-question" placeholder="請輸入您想問的問題，例如：我的感情會順利嗎？工作運如何？" rows="4"></textarea>
+
+                <button id="btn-to-draw" class="primary-btn" disabled>
+                    下一步：寫字
+                </button>
+            </div>
+        </section>
+
+        <!-- Step 2: Drawing Canvas -->
+        <section id="step-draw" class="step">
+            <div class="step-header">
+                <span class="step-number">二</span>
+                <h2>心中想著問題，寫下<strong>一個字</strong></h2>
+            </div>
+            <div class="step-content">
+                <div class="canvas-container">
+                    <canvas id="drawing-canvas"></canvas>
+                    <div class="canvas-placeholder">請在此寫一個字</div>
+                </div>
+
+                <div class="canvas-controls">
+                    <button id="btn-clear" class="secondary-btn">清除重寫</button>
+                    <button id="btn-interpret" class="primary-btn" disabled>開始解讀</button>
+                </div>
+
+                <button id="btn-back-question" class="back-btn">← 返回修改問題</button>
+            </div>
+        </section>
+
+        <!-- Step 3: Result -->
+        <section id="step-result" class="step">
+            <div class="step-header">
+                <span class="step-number">三</span>
+                <h2>拆字解讀</h2>
+            </div>
+            <div class="step-content">
+                <div class="result-card">
+                    <div class="user-info">
+                        <div class="drawn-character">
+                            <img id="drawn-image" src="" alt="您寫的字">
+                        </div>
+                        <div class="question-recap">
+                            <p class="label">您的問題：</p>
+                            <p id="recap-question" class="question-text"></p>
+
+                        </div>
+                    </div>
+
+                    <div id="interpretation-loading" class="loading">
+                        <div class="loading-spinner"></div>
+                        <p>大師正在為您解讀...</p>
+                    </div>
+
+                    <div id="interpretation-content" class="interpretation" style="display: none;">
+                        <!-- AI response will be inserted here -->
+                    </div>
+                </div>
+
+                <div class="result-actions">
+                    <button id="btn-share" class="primary-btn">分享結果</button>
+                    <button id="btn-restart" class="secondary-btn">再問一題</button>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
