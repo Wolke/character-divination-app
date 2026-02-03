@@ -158,14 +158,8 @@ function replyWithLiffLink(replyToken) {
 }
 
 function replyWithWelcome(replyToken) {
-  const messages = [
-    {
-      type: 'text',
-      text: '🔮 歡迎來到測字大師！\n\n我可以透過「拆字」幫您解讀命運與問題。\n\n📝 使用方式：\n輸入「測字」即可開始占卜\n\n💡 小提示：\n誠心發問，答案自現。'
-    }
-  ];
-  
-  replyMessage(replyToken, messages);
+  // 直接顯示開始測字的 Flex Message
+  replyWithLiffLink(replyToken);
 }
 
 function replyWithNeedQuestion(replyToken) {
