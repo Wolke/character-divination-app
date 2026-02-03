@@ -691,128 +691,46 @@
         // ====== SHARE ======
         btnShare.addEventListener('click', async () => {
             btnShare.disabled = true;
-            btnShare.textContent = '準備中...';
+            btnShare.textContent = '截圖中...';
 
             try {
-                // 截取解讀結果的文字摘要
-                const summary = content.innerText
-                    .replace(/\s+/g, ' ')
-                    .substring(0, 300);
-
-                // 使用 Flex Message 分享（含機器人資訊）
-                if (liff.isInClient()) {
-                    const result = await liff.shareTargetPicker([
-                        {
-                            type: 'flex',
-                            altText: '🔮 測字大師解讀結果',
-                            contents: {
-                                type: 'bubble',
-                                size: 'mega',
-                                header: {
-                                    type: 'box',
-                                    layout: 'vertical',
-                                    contents: [{
-                                        type: 'text',
-                                        text: '🔮 測字大師',
-                                        weight: 'bold',
-                                        size: 'xl',
-                                        color: '#fbbf24'
-                                    }],
-                                    backgroundColor: '#0f0a1a',
-                                    paddingAll: '15px'
-                                },
-                                body: {
-                                    type: 'box',
-                                    layout: 'vertical',
-                                    contents: [
-                                        {
-                                            type: 'text',
-                                            text: '📝 問題',
-                                            size: 'sm',
-                                            color: '#9ca3af'
-                                        },
-                                        {
-                                            type: 'text',
-                                            text: question,
-                                            weight: 'bold',
-                                            size: 'md',
-                                            wrap: true,
-                                            margin: 'sm'
-                                        },
-                                        {
-                                            type: 'separator',
-                                            margin: 'lg'
-                                        },
-                                        {
-                                            type: 'text',
-                                            text: '✨ 解讀摘要',
-                                            size: 'sm',
-                                            color: '#9ca3af',
-                                            margin: 'lg'
-                                        },
-                                        {
-                                            type: 'text',
-                                            text: summary + '...',
-                                            size: 'sm',
-                                            wrap: true,
-                                            margin: 'sm',
-                                            maxLines: 8
-                                        }
-                                    ],
-                                    backgroundColor: '#1a1025',
-                                    paddingAll: '20px'
-                                },
-                                footer: {
-                                    type: 'box',
-                                    layout: 'vertical',
-                                    contents: [
-                                        {
-                                            type: 'button',
-                                            action: {
-                                                type: 'uri',
-                                                label: '我也要測字',
-                                                uri: `https://liff.line.me/${CONFIG.LIFF_ID}`
-                                            },
-                                            style: 'primary',
-                                            color: '#8b5cf6'
-                                        },
-                                        {
-                                            type: 'text',
-                                            text: '👆 點擊開始你的測字占卜',
-                                            size: 'xs',
-                                            color: '#9ca3af',
-                                            align: 'center',
-                                            margin: 'md'
-                                        }
-                                    ],
-                                    backgroundColor: '#0f0a1a',
-                                    paddingAll: '15px'
-                                }
-                            }
-                        }
-                    ]);
-
-                    if (result) {
-                        alert('已分享成功！');
-                    }
-                } else {
-                    // 非 LINE 內：截圖下載
-                    const shareArea = document.getElementById('shareArea');
-                    const screenshotCanvas = await html2canvas(shareArea, {
-                        backgroundColor: '#0f0a1a',
-                        scale: 2,
-                        useCORS: true
+                // 截圖整個結果區域
+                const shareArea = document.getElementById('shareArea');
+                const screenshotCanvas = await html2canvas(shareArea, {
+                    backgroundColor: '#0f0a1a',
+                    scale: 2,
+                    useCORS: true
+                });
+                
+                // 轉換成 Blob
+                const blob = await new Promise(resolve => 
+                    screenshotCanvas.toBlob(resolve, 'image/png')
+                );
+                const file = new File([blob], '測字結果.png', { type: 'image/png' });
+                
+                btnShare.textContent = '分享中...';
+                
+                // 優先使用 Web Share API（支援直接分享圖片檔案）
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        title: '🔮 測字大師',
+                        text: `問題：${question}\n\n👉 來試試看：https://liff.line.me/${CONFIG.LIFF_ID}`,
+                        files: [file]
                     });
-
+                } else {
+                    // 不支援 Web Share：下載圖片
                     const link = document.createElement('a');
                     link.download = '測字結果.png';
                     link.href = screenshotCanvas.toDataURL();
                     link.click();
-                    alert('圖片已下載！可手動分享給朋友');
+                    alert('圖片已下載！請手動分享給朋友');
                 }
             } catch (err) {
-                console.error('Share error:', err);
-                alert('分享失敗：' + (err.message || '請重試'));
+                // 用戶取消分享不算錯誤
+                if (err.name !== 'AbortError') {
+                    console.error('Share error:', err);
+                    alert('分享失敗：' + (err.message || '請重試'));
+                }
             }
 
             btnShare.disabled = false;
