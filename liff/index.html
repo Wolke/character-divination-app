@@ -581,8 +581,104 @@
                     .replace(/\n\n/g, '</p><p>')
                     .replace(/\n/g, '<br>');
                 content.innerHTML = '<p>' + html + '</p>';
+
+                // 自動發送結果到聊天室
+                autoSendToChat(res.interpretation);
             } else {
                 content.innerHTML = `<div class="error"><p>😔 ${res.error}</p><button class="btn btn-secondary" onclick="location.reload()">重新嘗試</button></div>`;
+            }
+        }
+
+        async function autoSendToChat(interpretation) {
+            if (!liff.isInClient()) return;
+
+            try {
+                const summary = interpretation
+                    .replace(/[#*]/g, '')
+                    .replace(/\s+/g, ' ')
+                    .substring(0, 500);
+
+                await liff.sendMessages([{
+                    type: 'flex',
+                    altText: '🔮 測字大師解讀結果',
+                    contents: {
+                        type: 'bubble',
+                        size: 'mega',
+                        header: {
+                            type: 'box',
+                            layout: 'vertical',
+                            contents: [{
+                                type: 'text',
+                                text: '🔮 測字大師',
+                                weight: 'bold',
+                                size: 'xl',
+                                color: '#fbbf24'
+                            }],
+                            backgroundColor: '#0f0a1a',
+                            paddingAll: '15px'
+                        },
+                        body: {
+                            type: 'box',
+                            layout: 'vertical',
+                            contents: [
+                                {
+                                    type: 'text',
+                                    text: '📝 問題',
+                                    size: 'sm',
+                                    color: '#9ca3af'
+                                },
+                                {
+                                    type: 'text',
+                                    text: question,
+                                    weight: 'bold',
+                                    size: 'md',
+                                    wrap: true,
+                                    margin: 'sm'
+                                },
+                                {
+                                    type: 'separator',
+                                    margin: 'lg'
+                                },
+                                {
+                                    type: 'text',
+                                    text: '✨ 解讀結果',
+                                    size: 'sm',
+                                    color: '#9ca3af',
+                                    margin: 'lg'
+                                },
+                                {
+                                    type: 'text',
+                                    text: summary + '...',
+                                    size: 'sm',
+                                    wrap: true,
+                                    margin: 'sm'
+                                }
+                            ],
+                            backgroundColor: '#1a1025',
+                            paddingAll: '20px'
+                        },
+                        footer: {
+                            type: 'box',
+                            layout: 'vertical',
+                            contents: [{
+                                type: 'button',
+                                action: {
+                                    type: 'uri',
+                                    label: '我也要測字',
+                                    uri: `https://liff.line.me/${CONFIG.LIFF_ID}`
+                                },
+                                style: 'primary',
+                                color: '#8b5cf6'
+                            }],
+                            backgroundColor: '#0f0a1a',
+                            paddingAll: '15px'
+                        }
+                    }
+                }]);
+
+                console.log('已自動發送結果到聊天室');
+            } catch (err) {
+                console.error('自動發送失敗:', err);
             }
         }
 
