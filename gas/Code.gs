@@ -8,6 +8,142 @@ const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMI
 const LINE_CHANNEL_ACCESS_TOKEN = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN') || 'YOUR_LINE_CHANNEL_ACCESS_TOKEN';
 const LIFF_URL = PropertiesService.getScriptProperties().getProperty('LIFF_URL') || 'https://liff.line.me/YOUR_LIFF_ID';
 
+// Google Sheets 用戶資料庫
+const SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || '';
+const SHEET_NAME = 'Users';
+const INITIAL_CREDITS = 1; // 新用戶免費次數
+
+// ====== 用戶資料庫函數 ======
+
+function getSheet() {
+  if (!SPREADSHEET_ID) {
+    // 自動建立新的 Spreadsheet
+    const ss = SpreadsheetApp.create('測字大師用戶資料');
+    PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
+    const sheet = ss.getActiveSheet();
+    sheet.setName(SHEET_NAME);
+    // 設定標題列
+    sheet.getRange(1, 1, 1, 8).setValues([['userId', 'displayName', 'credits', 'usedCount', 'referredBy', 'referralCount', 'waitlistPaid', 'createdAt']]);
+    return sheet;
+  }
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+    sheet.getRange(1, 1, 1, 8).setValues([['userId', 'displayName', 'credits', 'usedCount', 'referredBy', 'referralCount', 'waitlistPaid', 'createdAt']]);
+  }
+  return sheet;
+}
+
+function findUserRow(sheet, userId) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === userId) {
+      return i + 1; // 1-indexed row number
+    }
+  }
+  return null;
+}
+
+function getOrCreateUser(userId, displayName, referrerId) {
+  const sheet = getSheet();
+  const existingRow = findUserRow(sheet, userId);
+  
+  if (existingRow) {
+    // 用戶已存在，返回資料
+    const row = sheet.getRange(existingRow, 1, 1, 8).getValues()[0];
+    return {
+      userId: row[0],
+      displayName: row[1],
+      credits: row[2],
+      usedCount: row[3],
+      referredBy: row[4],
+      referralCount: row[5],
+      waitlistPaid: row[6],
+      createdAt: row[7],
+      isNew: false
+    };
+  }
+  
+  // 建立新用戶
+  const newRow = [
+    userId,
+    displayName || '',
+    INITIAL_CREDITS,
+    0,
+    referrerId || '',
+    0,
+    false,
+    new Date().toISOString()
+  ];
+  sheet.appendRow(newRow);
+  
+  return {
+    userId: newRow[0],
+    displayName: newRow[1],
+    credits: newRow[2],
+    usedCount: newRow[3],
+    referredBy: newRow[4],
+    referralCount: newRow[5],
+    waitlistPaid: newRow[6],
+    createdAt: newRow[7],
+    isNew: true
+  };
+}
+
+function useCredit(userId) {
+  const sheet = getSheet();
+  const row = findUserRow(sheet, userId);
+  if (!row) return { success: false, error: '用戶不存在' };
+  
+  const credits = sheet.getRange(row, 3).getValue();
+  if (credits <= 0) {
+    return { success: false, error: '額度不足', credits: 0 };
+  }
+  
+  // 扣除額度
+  sheet.getRange(row, 3).setValue(credits - 1);
+  // 增加使用次數
+  const usedCount = sheet.getRange(row, 4).getValue();
+  sheet.getRange(row, 4).setValue(usedCount + 1);
+  
+  return { success: true, credits: credits - 1 };
+}
+
+function addCreditToReferrer(referrerId) {
+  if (!referrerId) return { success: false };
+  
+  const sheet = getSheet();
+  const row = findUserRow(sheet, referrerId);
+  if (!row) return { success: false };
+  
+  // 增加額度
+  const credits = sheet.getRange(row, 3).getValue();
+  sheet.getRange(row, 3).setValue(credits + 1);
+  // 增加邀請人數
+  const referralCount = sheet.getRange(row, 6).getValue();
+  sheet.getRange(row, 6).setValue(referralCount + 1);
+  
+  return { success: true, newCredits: credits + 1 };
+}
+
+function joinPaidWaitlist(userId) {
+  const sheet = getSheet();
+  const row = findUserRow(sheet, userId);
+  if (!row) return { success: false, error: '用戶不存在' };
+  
+  sheet.getRange(row, 7).setValue(true);
+  return { success: true, message: '已加入付費等候名單，功能上線後將第一時間通知您！' };
+}
+
+function getUserCredits(userId) {
+  const sheet = getSheet();
+  const row = findUserRow(sheet, userId);
+  if (!row) return { credits: INITIAL_CREDITS, exists: false };
+  
+  const credits = sheet.getRange(row, 3).getValue();
+  return { credits: credits, exists: true };
+}
 // ====== 網頁進入點 ======
 
 /**
@@ -217,14 +353,61 @@ function replyMessage(replyToken, messages) {
 // ====== LIFF API 處理 ======
 
 function handleLiffRequest(data) {
-  const { question, imageBase64 } = data;
+  const { action, userId, displayName, referrerId, question, imageBase64 } = data;
   
-  if (!question || !imageBase64) {
-    return createJsonResponse({ success: false, error: '請提供問題和圖片' });
+  switch (action) {
+    case 'checkUser':
+      // 檢查或建立用戶
+      const user = getOrCreateUser(userId, displayName, referrerId);
+      // 如果是新用戶且有邀請人，標記邀請成功
+      return createJsonResponse({ success: true, user: user });
+      
+    case 'interpret':
+      // 執行測字（會扣除額度）
+      if (!question || !imageBase64) {
+        return createJsonResponse({ success: false, error: '請提供問題和圖片' });
+      }
+      
+      // 先檢查額度
+      const creditResult = useCredit(userId);
+      if (!creditResult.success) {
+        return createJsonResponse({ success: false, error: creditResult.error, credits: 0, needCredits: true });
+      }
+      
+      const interpretation = callGeminiVision(question, imageBase64);
+      return createJsonResponse({ 
+        success: true, 
+        interpretation: interpretation,
+        credits: creditResult.credits
+      });
+      
+    case 'completeReading':
+      // 完成測字，觸發邀請獎勵
+      const userData = getOrCreateUser(userId, displayName, '');
+      if (userData.isNew && userData.referredBy) {
+        // 新用戶完成首次測字，給邀請人加額度
+        addCreditToReferrer(userData.referredBy);
+      }
+      return createJsonResponse({ success: true });
+      
+    case 'joinWaitlist':
+      // 加入付費等候名單
+      const waitlistResult = joinPaidWaitlist(userId);
+      return createJsonResponse(waitlistResult);
+      
+    case 'getCredits':
+      // 取得剩餘額度
+      const creditsResult = getUserCredits(userId);
+      return createJsonResponse({ success: true, credits: creditsResult.credits });
+      
+    default:
+      // 舊版 API 相容：直接執行測字（不扣額度，給測試用）
+      if (question && imageBase64) {
+        const result = callGeminiVision(question, imageBase64);
+        return createJsonResponse({ success: true, interpretation: result });
+      }
+      return createJsonResponse({ success: false, error: '未知的動作' });
   }
-  
-  const interpretation = callGeminiVision(question, imageBase64);
-  return createJsonResponse({ success: true, interpretation: interpretation });
 }
 
 function createJsonResponse(data) {

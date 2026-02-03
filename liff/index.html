@@ -402,6 +402,38 @@
                 </div>
             </section>
 
+            <!-- 邀請畫面 (額度不足時顯示) -->
+            <section id="invite-screen" class="step">
+                <div class="invite-card"
+                    style="background: linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 100%); border-radius: 16px; padding: 24px; text-align: center;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📬</div>
+                    <h2 style="color: var(--gold); margin-bottom: 8px;">測字額度已用完</h2>
+                    <p style="color: var(--text-muted); margin-bottom: 24px;">邀請好友來測字，即可獲得更多額度！</p>
+
+                    <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">你的專屬邀請連結</p>
+                        <input type="text" id="inviteLink" readonly class="input-field"
+                            style="text-align: center; font-size: 12px; cursor: pointer;" onclick="copyInviteLink()">
+                        <button id="btnCopyLink" class="btn btn-primary" style="margin-top: 12px; width: 100%;">📋
+                            複製邀請連結</button>
+                    </div>
+
+                    <button id="btnShareInvite" class="btn btn-line" style="width: 100%; margin-bottom: 12px;">📤
+                        分享邀請連結到 LINE</button>
+
+                    <div style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px;">
+                        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 12px;">或者...</p>
+                        <button id="btnPaidWaitlist" class="btn btn-secondary"
+                            style="width: 100%; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                            💎 付費無限測字 (即將推出)
+                        </button>
+                    </div>
+
+                    <p id="creditsInfo" style="color: var(--text-muted); font-size: 12px; margin-top: 16px;">剩餘額度：<span
+                            id="creditsCount">0</span> 次</p>
+                </div>
+            </section>
+
             <!-- Test Button -->
             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
                 <button id="btnTestSend" class="btn btn-secondary" style="display: none; background: #ff6b6b;">🧪
@@ -422,6 +454,12 @@
         let hasDrawing = false;
         let ctx, lastX, lastY, isDrawing = false;
         let userProfile = null;
+        let userCredits = 1; // 預設 1 次免費
+        let referrerId = null; // 邀請人 ID
+
+        // 從 URL 取得邀請人 ID
+        const urlParams = new URLSearchParams(window.location.search);
+        referrerId = urlParams.get('ref') || null;
 
         // ====== ELEMENTS ======
         const initScreen = document.getElementById('init-screen');
@@ -450,14 +488,73 @@
                     document.getElementById('user-avatar').src = userProfile.pictureUrl;
                     document.getElementById('user-name').textContent = userProfile.displayName;
                     document.getElementById('user-badge').style.display = 'inline-flex';
+
+                    // 檢查/建立用戶並取得額度
+                    await checkUserCredits();
                 }
 
                 initScreen.style.display = 'none';
                 app.style.display = 'block';
 
+                // 設定邀請連結
+                setupInviteLink();
+
             } catch (error) {
                 console.error('LIFF init error:', error);
                 initScreen.innerHTML = '<p style="color: var(--error);">初始化失敗，請重新整理頁面</p>';
+            }
+        }
+
+        async function checkUserCredits() {
+            if (!userProfile) return;
+
+            try {
+                const response = await fetch(CONFIG.GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'checkUser',
+                        userId: userProfile.userId,
+                        displayName: userProfile.displayName,
+                        referrerId: referrerId
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    userCredits = result.user.credits;
+                    updateCreditsDisplay();
+                }
+            } catch (err) {
+                console.error('Check user error:', err);
+            }
+        }
+
+        function updateCreditsDisplay() {
+            const creditsEl = document.getElementById('creditsCount');
+            if (creditsEl) creditsEl.textContent = userCredits;
+        }
+
+        function setupInviteLink() {
+            if (!userProfile) return;
+            const inviteUrl = `https://liff.line.me/${CONFIG.LIFF_ID}?ref=${userProfile.userId}`;
+            const inviteLinkEl = document.getElementById('inviteLink');
+            if (inviteLinkEl) inviteLinkEl.value = inviteUrl;
+        }
+
+        function showInviteScreen() {
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+            document.getElementById('invite-screen').classList.add('active');
+        }
+
+        async function copyInviteLink() {
+            const inviteLink = document.getElementById('inviteLink');
+            try {
+                await navigator.clipboard.writeText(inviteLink.value);
+                alert('已複製邀請連結！');
+            } catch (err) {
+                inviteLink.select();
+                document.execCommand('copy');
+                alert('已複製邀請連結！');
             }
         }
 
@@ -545,6 +642,12 @@
         btnBack.addEventListener('click', () => showStep(1));
 
         btnInterpret.addEventListener('click', async () => {
+            // 先檢查額度
+            if (userCredits <= 0) {
+                showInviteScreen();
+                return;
+            }
+
             showStep(3);
             loading.style.display = 'block';
             content.style.display = 'none';
@@ -559,10 +662,31 @@
                 const response = await fetch(CONFIG.GAS_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ question, imageBase64: base64 })
+                    body: JSON.stringify({
+                        action: 'interpret',
+                        userId: userProfile?.userId,
+                        question,
+                        imageBase64: base64
+                    })
                 });
 
                 const result = await response.json();
+
+                // 檢查是否額度不足
+                if (result.needCredits) {
+                    loading.style.display = 'none';
+                    userCredits = 0;
+                    updateCreditsDisplay();
+                    showInviteScreen();
+                    return;
+                }
+
+                // 更新剩餘額度
+                if (result.credits !== undefined) {
+                    userCredits = result.credits;
+                    updateCreditsDisplay();
+                }
+
                 handleResult(result);
             } catch (error) {
                 handleError(error);
@@ -750,11 +874,77 @@
         });
 
         btnRestart.addEventListener('click', () => {
+            // 如果額度用完，顯示邀請畫面而不是重新開始
+            if (userCredits <= 0) {
+                showInviteScreen();
+                return;
+            }
             question = '';
             hasDrawing = false;
             questionEl.value = '';
             btnNext.disabled = true;
             showStep(1);
+        });
+
+        // ====== INVITE BUTTONS ======
+        document.getElementById('btnCopyLink').addEventListener('click', copyInviteLink);
+
+        document.getElementById('btnShareInvite').addEventListener('click', async () => {
+            const inviteUrl = document.getElementById('inviteLink').value;
+            const shareText = `🔮 測字大師 - AI 拆字占卜\n\n來試試看吧！\n${inviteUrl}`;
+
+            if (liff.isInClient()) {
+                try {
+                    await liff.shareTargetPicker([{
+                        type: 'text',
+                        text: shareText
+                    }]);
+                } catch (err) {
+                    console.error('Share error:', err);
+                }
+            } else if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: '測字大師',
+                        text: shareText,
+                        url: inviteUrl
+                    });
+                } catch (err) {
+                    console.error('Share error:', err);
+                }
+            } else {
+                copyInviteLink();
+            }
+        });
+
+        document.getElementById('btnPaidWaitlist').addEventListener('click', async () => {
+            const btn = document.getElementById('btnPaidWaitlist');
+            btn.disabled = true;
+            btn.textContent = '處理中...';
+
+            try {
+                const response = await fetch(CONFIG.GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'joinWaitlist',
+                        userId: userProfile?.userId
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('🎉 已加入等候名單！\n\n付費功能上線後，我們會第一時間通知您！');
+                    btn.textContent = '✅ 已登記';
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = '💎 付費無限測字 (即將推出)';
+                }
+            } catch (err) {
+                console.error('Waitlist error:', err);
+                btn.disabled = false;
+                btn.textContent = '💎 付費無限測字 (即將推出)';
+                alert('操作失敗，請稍後再試');
+            }
         });
 
         // ====== TEST BUTTON ======
