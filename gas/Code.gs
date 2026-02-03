@@ -18,6 +18,33 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
 }
 
+/**
+ * POST 請求 - 供外部 LIFF 呼叫
+ */
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const { question, imageBase64 } = data;
+    
+    if (!question || !imageBase64) {
+      return createJsonResponse({ success: false, error: '請提供問題和圖片' });
+    }
+    
+    const interpretation = callGeminiVision(question, imageBase64);
+    return createJsonResponse({ success: true, interpretation: interpretation });
+    
+  } catch (error) {
+    console.error('Error:', error);
+    return createJsonResponse({ success: false, error: error.message });
+  }
+}
+
+function createJsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // ====== API 端點（前端呼叫）======
 
 /**

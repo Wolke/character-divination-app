@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="測字占卜 - 輸入問題，手寫一字，AI 為您拆字解讀">
+    <title>測字大師</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <!-- LIFF SDK -->
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <!-- html2canvas for screenshot -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0f0a1a;
+            --bg-card: #1a1025;
+            --primary: #8b5cf6;
+            --primary-glow: rgba(139, 92, 246, 0.3);
+            --gold: #fbbf24;
+            --text: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --border: rgba(139, 92, 246, 0.3);
+            --error: #ef4444;
+            --line-green: #06c755;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Noto Serif TC', serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a0a2e 50%, var(--bg-dark) 100%);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        .container {
+            max-width: 420px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        header h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, var(--gold) 0%, #f59e0b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            margin-top: 4px;
+        }
+
+        .user-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-card);
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin-top: 12px;
+            font-size: 0.85rem;
+        }
+
+        .user-badge img {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+        }
+
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .step-number {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .step-header h2 {
+            font-size: 1.1rem;
+            font-weight: 400;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-card);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 1rem;
+            resize: none;
+            margin-bottom: 16px;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px var(--primary-glow);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .btn-line {
+            background: var(--line-green);
+            color: white;
+        }
+
+        .btn-back {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            padding: 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .canvas-wrap {
+            background: white;
+            border-radius: 12px;
+            aspect-ratio: 1;
+            margin-bottom: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .canvas-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #999;
+            font-size: 1.2rem;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .canvas-wrap.has-drawing .canvas-hint {
+            opacity: 0;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .controls .btn {
+            flex: 1;
+        }
+
+        .result-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .user-info {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .user-info img {
+            width: 80px;
+            height: 80px;
+            border-radius: 8px;
+            background: white;
+        }
+
+        .user-info .label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .user-info .question {
+            margin-top: 4px;
+            font-size: 1rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .interpretation {
+            line-height: 1.8;
+        }
+
+        .interpretation h3 {
+            color: var(--gold);
+            margin: 20px 0 12px;
+            font-size: 1.1rem;
+        }
+
+        .interpretation h3:first-child {
+            margin-top: 0;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .result-actions .btn {
+            flex: 1;
+        }
+
+        .error {
+            text-align: center;
+            color: var(--error);
+            padding: 20px;
+        }
+
+        #init-screen {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        #init-screen .spinner {
+            width: 50px;
+            height: 50px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Init Screen -->
+        <div id="init-screen">
+            <div class="spinner"></div>
+            <p>載入中...</p>
+        </div>
+
+        <!-- Main App (hidden until LIFF init) -->
+        <div id="app" style="display: none;">
+            <header>
+                <h1>🔮 測字大師</h1>
+                <p>心誠則靈，字現天機</p>
+                <div id="user-badge" class="user-badge" style="display: none;">
+                    <img id="user-avatar" src="" alt="">
+                    <span id="user-name"></span>
+                </div>
+            </header>
+
+            <!-- Step 1: Question -->
+            <section id="step1" class="step active">
+                <div class="step-header">
+                    <span class="step-number">一</span>
+                    <h2>您想問什麼？</h2>
+                </div>
+                <textarea id="question" rows="4" placeholder="請輸入您想問的問題，例如：我的感情會順利嗎？工作運如何？"></textarea>
+                <button id="btnNext" class="btn btn-primary" disabled>下一步：寫字</button>
+            </section>
+
+            <!-- Step 2: Draw -->
+            <section id="step2" class="step">
+                <div class="step-header">
+                    <span class="step-number">二</span>
+                    <h2>心中想著問題，寫下<strong>一個字</strong></h2>
+                </div>
+                <div class="canvas-wrap" id="canvasWrap">
+                    <canvas id="canvas"></canvas>
+                    <div class="canvas-hint">請在此寫一個字</div>
+                </div>
+                <div class="controls">
+                    <button id="btnClear" class="btn btn-secondary">清除重寫</button>
+                    <button id="btnInterpret" class="btn btn-primary" disabled>開始解讀</button>
+                </div>
+                <button id="btnBack" class="btn-back">← 返回修改問題</button>
+            </section>
+
+            <!-- Step 3: Result -->
+            <section id="step3" class="step">
+                <div id="shareArea">
+                    <header style="padding: 12px 0; text-align: center;">
+                        <h1
+                            style="font-size: 1.4rem; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                            🔮 測字大師</h1>
+                    </header>
+                    <div class="result-card">
+                        <div class="user-info">
+                            <img id="drawnImg" src="" alt="您寫的字">
+                            <div>
+                                <p class="label">您的問題：</p>
+                                <p class="question" id="recapQ"></p>
+                            </div>
+                        </div>
+                        <div id="loading" class="loading">
+                            <div class="spinner"></div>
+                            <p>大師正在為您解讀...</p>
+                        </div>
+                        <div id="content" class="interpretation" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <button id="btnShare" class="btn btn-line">分享到 LINE</button>
+                    <button id="btnRestart" class="btn btn-secondary">再問一題</button>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // ====== CONFIG ======
+        const CONFIG = {
+            LIFF_ID: 'YOUR_LIFF_ID', // Replace with your LIFF ID
+            GAS_URL: 'https://script.google.com/macros/s/AKfycbwjgvnG7Q-L43qS0vongMvhGqNWAeNXSC6qlFv0E8XIgiOgUa3IBcKrcePGKmCQz_XC/exec'
+        };
+
+        // ====== STATE ======
+        let question = '';
+        let hasDrawing = false;
+        let ctx, lastX, lastY, isDrawing = false;
+        let userProfile = null;
+
+        // ====== ELEMENTS ======
+        const initScreen = document.getElementById('init-screen');
+        const app = document.getElementById('app');
+        const questionEl = document.getElementById('question');
+        const btnNext = document.getElementById('btnNext');
+        const canvas = document.getElementById('canvas');
+        const canvasWrap = document.getElementById('canvasWrap');
+        const btnClear = document.getElementById('btnClear');
+        const btnInterpret = document.getElementById('btnInterpret');
+        const btnBack = document.getElementById('btnBack');
+        const drawnImg = document.getElementById('drawnImg');
+        const recapQ = document.getElementById('recapQ');
+        const loading = document.getElementById('loading');
+        const content = document.getElementById('content');
+        const btnShare = document.getElementById('btnShare');
+        const btnRestart = document.getElementById('btnRestart');
+
+        // ====== LIFF INIT ======
+        async function initializeLiff() {
+            try {
+                await liff.init({ liffId: CONFIG.LIFF_ID });
+
+                if (liff.isLoggedIn()) {
+                    userProfile = await liff.getProfile();
+                    document.getElementById('user-avatar').src = userProfile.pictureUrl;
+                    document.getElementById('user-name').textContent = userProfile.displayName;
+                    document.getElementById('user-badge').style.display = 'inline-flex';
+                }
+
+                initScreen.style.display = 'none';
+                app.style.display = 'block';
+
+            } catch (error) {
+                console.error('LIFF init error:', error);
+                initScreen.innerHTML = '<p style="color: var(--error);">初始化失敗，請重新整理頁面</p>';
+            }
+        }
+
+        // ====== STEP NAVIGATION ======
+        function showStep(n) {
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+            document.getElementById('step' + n).classList.add('active');
+            if (n === 2) setTimeout(initCanvas, 100);
+        }
+
+        // ====== CANVAS ======
+        function initCanvas() {
+            const rect = canvasWrap.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            ctx.strokeStyle = '#1a1025';
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+            const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+            return { x, y };
+        }
+
+        function startDraw(e) {
+            e.preventDefault();
+            isDrawing = true;
+            const pos = getPos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            lastX = pos.x;
+            lastY = pos.y;
+            if (!hasDrawing) {
+                hasDrawing = true;
+                canvasWrap.classList.add('has-drawing');
+                btnInterpret.disabled = false;
+            }
+        }
+
+        function stopDraw() { isDrawing = false; }
+
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDraw);
+        canvas.addEventListener('mouseout', stopDraw);
+        canvas.addEventListener('touchstart', startDraw, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
+        canvas.addEventListener('touchend', stopDraw);
+
+        // ====== EVENTS ======
+        questionEl.addEventListener('input', () => {
+            question = questionEl.value;
+            btnNext.disabled = question.trim().length === 0;
+        });
+
+        btnNext.addEventListener('click', () => showStep(2));
+
+        btnClear.addEventListener('click', () => {
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            hasDrawing = false;
+            canvasWrap.classList.remove('has-drawing');
+            btnInterpret.disabled = true;
+        });
+
+        btnBack.addEventListener('click', () => showStep(1));
+
+        btnInterpret.addEventListener('click', async () => {
+            showStep(3);
+            loading.style.display = 'block';
+            content.style.display = 'none';
+
+            const imgData = canvas.toDataURL('image/png');
+            drawnImg.src = imgData;
+            recapQ.textContent = question;
+
+            const base64 = imgData.split(',')[1];
+
+            try {
+                const response = await fetch(CONFIG.GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question, imageBase64: base64 })
+                });
+
+                const result = await response.json();
+                handleResult(result);
+            } catch (error) {
+                handleError(error);
+            }
+        });
+
+        function handleResult(res) {
+            loading.style.display = 'none';
+            content.style.display = 'block';
+
+            if (res.success) {
+                let html = res.interpretation
+                    .replace(/### (.*)/g, '<h3>$1</h3>')
+                    .replace(/## (.*)/g, '<h3>$1</h3>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\n\n/g, '</p><p>')
+                    .replace(/\n/g, '<br>');
+                content.innerHTML = '<p>' + html + '</p>';
+            } else {
+                content.innerHTML = `<div class="error"><p>😔 ${res.error}</p><button class="btn btn-secondary" onclick="location.reload()">重新嘗試</button></div>`;
+            }
+        }
+
+        function handleError(err) {
+            loading.style.display = 'none';
+            content.style.display = 'block';
+            content.innerHTML = `<div class="error"><p>😔 ${err.message}</p><button class="btn btn-secondary" onclick="location.reload()">重新嘗試</button></div>`;
+        }
+
+        // ====== SHARE ======
+        btnShare.addEventListener('click', async () => {
+            btnShare.disabled = true;
+            btnShare.textContent = '準備中...';
+
+            try {
+                const shareArea = document.getElementById('shareArea');
+                const screenshotCanvas = await html2canvas(shareArea, {
+                    backgroundColor: '#0f0a1a',
+                    scale: 2,
+                    useCORS: true
+                });
+
+                // Convert to blob
+                const blob = await new Promise(resolve => screenshotCanvas.toBlob(resolve, 'image/png'));
+
+                // If in LIFF and can share
+                if (liff.isInClient()) {
+                    // Use LIFF shareTargetPicker for text (image sharing requires flex message)
+                    const text = `🔮 測字大師解讀結果\n\n問題：${question}\n\n${content.innerText.substring(0, 200)}...\n\n👉 來試試看：https://liff.line.me/${CONFIG.LIFF_ID}`;
+
+                    await liff.shareTargetPicker([{
+                        type: 'text',
+                        text: text
+                    }]);
+                } else if (navigator.canShare && navigator.canShare({ files: [new File([blob], 'result.png', { type: 'image/png' })] })) {
+                    // Web Share API with file
+                    await navigator.share({
+                        title: '測字大師',
+                        files: [new File([blob], '測字結果.png', { type: 'image/png' })]
+                    });
+                } else {
+                    // Fallback: download
+                    const link = document.createElement('a');
+                    link.download = '測字結果.png';
+                    link.href = screenshotCanvas.toDataURL();
+                    link.click();
+                    alert('圖片已下載！');
+                }
+            } catch (err) {
+                console.error('Share error:', err);
+                alert('分享失敗，請重試');
+            }
+
+            btnShare.disabled = false;
+            btnShare.textContent = '分享到 LINE';
+        });
+
+        btnRestart.addEventListener('click', () => {
+            question = '';
+            hasDrawing = false;
+            questionEl.value = '';
+            btnNext.disabled = true;
+            showStep(1);
+        });
+
+        // ====== INIT ======
+        initializeLiff();
+    </script>
+</body>
+
+</html>
