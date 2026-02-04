@@ -422,20 +422,39 @@
             <section id="invite-screen" class="step">
                 <div class="invite-card"
                     style="background: linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 100%); border-radius: 16px; padding: 24px; text-align: center;">
-                    <div style="font-size: 48px; margin-bottom: 16px;">📬</div>
+                    <div style="font-size: 48px; margin-bottom: 16px;">🎁</div>
                     <h2 style="color: var(--gold); margin-bottom: 8px;">測字額度已用完</h2>
-                    <p style="color: var(--text-muted); margin-bottom: 24px;">邀請好友來測字，即可獲得更多額度！</p>
+                    <p style="color: var(--text-muted); margin-bottom: 24px;">邀請好友加入，雙方都能獲得額度！</p>
 
-                    <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-                        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">你的專屬邀請連結</p>
-                        <input type="text" id="inviteLink" readonly class="input-field"
-                            style="text-align: center; font-size: 12px; cursor: pointer;" onclick="copyInviteLink()">
-                        <button id="btnCopyLink" class="btn btn-primary" style="margin-top: 12px; width: 100%;">📋
-                            複製邀請連結</button>
+                    <!-- 邀請碼顯示 -->
+                    <div
+                        style="background: rgba(139, 92, 246, 0.2); border: 2px solid var(--primary); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">你的專屬邀請碼</p>
+                        <div id="myReferralCode"
+                            style="font-size: 36px; font-weight: bold; color: var(--primary); letter-spacing: 4px; font-family: monospace;">
+                            ------</div>
+                        <button id="btnCopyCode" class="btn btn-primary" style="margin-top: 12px;">📋 複製邀請碼</button>
                     </div>
 
-                    <button id="btnShareInvite" class="btn btn-line" style="width: 100%; margin-bottom: 12px;">📤
-                        分享邀請連結到 LINE</button>
+                    <!-- 邀請步驟說明 -->
+                    <div
+                        style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: left;">
+                        <p style="font-size: 14px; color: var(--gold); margin-bottom: 12px; text-align: center;">📝 邀請方法
+                        </p>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">1️⃣ 分享下方連結給朋友</p>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">2️⃣ 請朋友加入「測字大師」好友</p>
+                        <p style="font-size: 13px; color: var(--text-muted);">3️⃣ 朋友輸入你的邀請碼 → 雙方各得 1 次！</p>
+                    </div>
+
+                    <!-- 加好友按鈕 -->
+                    <a href="https://line.me/R/ti/p/@145yhtov" target="_blank" class="btn btn-line"
+                        style="display: block; width: 100%; margin-bottom: 12px; text-decoration: none;">
+                        ➕ 加入測字大師好友
+                    </a>
+
+                    <!-- 分享文案 -->
+                    <button id="btnShareInvite" class="btn btn-secondary" style="width: 100%; margin-bottom: 12px;">📤
+                        分享邀請訊息</button>
 
                     <div style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px;">
                         <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 12px;">或者...</p>
@@ -469,7 +488,7 @@
         // ====== CONFIG ======
         const CONFIG = {
             LIFF_ID: '2009035600-oY8Oi40n', // Replace with your LIFF ID
-            GAS_URL: 'https://script.google.com/macros/s/AKfycbzT12x4q7Y7RY_XKCR9PxRLwbnlBh9XfgwTYF6j9BCJ00_JQ4hIVewu34uqb9V4NGBx/exec'
+            GAS_URL: 'https://script.google.com/macros/s/AKfycbyFOPX3E8vTloolR8lm_vSRbxF0C3dCKt5Ir_-gdmELtoR4Qdjd9oQkju_qWijpkaFF/exec'
         };
 
         // ====== STATE ======
@@ -478,6 +497,7 @@
         let ctx, lastX, lastY, isDrawing = false;
         let userProfile = null;
         let userCredits = 1; // 預設 1 次免費
+        let userReferralCode = null; // 用戶邀請碼
         let referrerId = null; // 邀請人 ID
 
         // 從 URL 取得邀請人 ID
@@ -545,7 +565,9 @@
                 const result = await response.json();
                 if (result.success) {
                     userCredits = result.user.credits;
+                    userReferralCode = result.user.referralCode || null;
                     updateCreditsDisplay();
+                    setupInviteLink(); // 更新邀請碼顯示
                 }
             } catch (err) {
                 console.error('Check user error:', err);
@@ -562,6 +584,12 @@
             const inviteUrl = `https://liff.line.me/${CONFIG.LIFF_ID}?ref=${userProfile.userId}`;
             const inviteLinkEl = document.getElementById('inviteLink');
             if (inviteLinkEl) inviteLinkEl.value = inviteUrl;
+
+            // 顯示邀請碼
+            if (userReferralCode) {
+                const codeEl = document.getElementById('myReferralCode');
+                if (codeEl) codeEl.textContent = userReferralCode;
+            }
         }
 
         function showInviteScreen() {
@@ -571,6 +599,7 @@
 
         async function copyInviteLink() {
             const inviteLink = document.getElementById('inviteLink');
+            if (!inviteLink) return;
             try {
                 await navigator.clipboard.writeText(inviteLink.value);
                 alert('已複製邀請連結！');
@@ -578,6 +607,50 @@
                 inviteLink.select();
                 document.execCommand('copy');
                 alert('已複製邀請連結！');
+            }
+        }
+
+        async function copyReferralCode() {
+            if (!userReferralCode) {
+                alert('邀請碼尚未載入，請稍候');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(userReferralCode);
+                alert(`已複製邀請碼：${userReferralCode}`);
+            } catch (err) {
+                // Fallback
+                const textarea = document.createElement('textarea');
+                textarea.value = userReferralCode;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                alert(`已複製邀請碼：${userReferralCode}`);
+            }
+        }
+
+        function shareInviteMessage() {
+            const shareText = `🔮 測字大師 - AI 拆字占卜
+
+我用 AI 測字解答了人生難題！你也來試試吧~
+
+👉 加好友：https://line.me/R/ti/p/@145yhtov
+👉 輸入我的邀請碼：${userReferralCode || '------'}
+雙方都能獲得額外測字次數！`;
+
+            if (navigator.share) {
+                navigator.share({
+                    title: '🔮 測字大師',
+                    text: shareText
+                }).catch(() => { });
+            } else {
+                // Fallback: 複製到剪貼簿
+                navigator.clipboard.writeText(shareText).then(() => {
+                    alert('邀請訊息已複製！請貼到聊天視窗分享');
+                }).catch(() => {
+                    alert('請手動複製以下訊息分享：\n\n' + shareText);
+                });
             }
         }
 
@@ -1038,35 +1111,20 @@
         });
 
         // ====== INVITE BUTTONS ======
-        document.getElementById('btnCopyLink').addEventListener('click', copyInviteLink);
+        // 複製邀請碼按鈕
+        const btnCopyCode = document.getElementById('btnCopyCode');
+        if (btnCopyCode) {
+            btnCopyCode.addEventListener('click', copyReferralCode);
+        }
 
-        document.getElementById('btnShareInvite').addEventListener('click', async () => {
-            const inviteUrl = document.getElementById('inviteLink').value;
-            const shareText = `🔮 測字大師 - AI 拆字占卜\n\n來試試看吧！\n${inviteUrl}`;
+        // 舊的複製連結按鈕（如果還存在）
+        const btnCopyLink = document.getElementById('btnCopyLink');
+        if (btnCopyLink) {
+            btnCopyLink.addEventListener('click', copyInviteLink);
+        }
 
-            if (liff.isInClient()) {
-                try {
-                    await liff.shareTargetPicker([{
-                        type: 'text',
-                        text: shareText
-                    }]);
-                } catch (err) {
-                    console.error('Share error:', err);
-                }
-            } else if (navigator.share) {
-                try {
-                    await navigator.share({
-                        title: '測字大師',
-                        text: shareText,
-                        url: inviteUrl
-                    });
-                } catch (err) {
-                    console.error('Share error:', err);
-                }
-            } else {
-                copyInviteLink();
-            }
-        });
+        // 分享邀請訊息按鈕
+        document.getElementById('btnShareInvite').addEventListener('click', shareInviteMessage);
 
         document.getElementById('btnPaidWaitlist').addEventListener('click', async () => {
             const btn = document.getElementById('btnPaidWaitlist');

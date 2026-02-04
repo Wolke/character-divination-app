@@ -92,8 +92,17 @@ function cleanOldImages() {
     console.error('Clean images error:', error);
   }
 }
-
 // ====== 用戶資料庫函數 ======
+
+// 生成 6 位英數字邀請碼
+function generateReferralCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 排除易混淆字元
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
 
 function getSheet() {
   if (!SPREADSHEET_ID) {
@@ -102,15 +111,15 @@ function getSheet() {
     PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
     const sheet = ss.getActiveSheet();
     sheet.setName(SHEET_NAME);
-    // 設定標題列
-    sheet.getRange(1, 1, 1, 8).setValues([['userId', 'displayName', 'credits', 'usedCount', 'referredBy', 'referralCount', 'waitlistPaid', 'createdAt']]);
+    // 設定標題列（9 欄，增加 referralCode）
+    sheet.getRange(1, 1, 1, 9).setValues([['userId', 'displayName', 'credits', 'usedCount', 'referredBy', 'referralCount', 'waitlistPaid', 'createdAt', 'referralCode']]);
     return sheet;
   }
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    sheet.getRange(1, 1, 1, 8).setValues([['userId', 'displayName', 'credits', 'usedCount', 'referredBy', 'referralCount', 'waitlistPaid', 'createdAt']]);
+    sheet.getRange(1, 1, 1, 9).setValues([['userId', 'displayName', 'credits', 'usedCount', 'referredBy', 'referralCount', 'waitlistPaid', 'createdAt', 'referralCode']]);
   }
   return sheet;
 }
@@ -130,8 +139,16 @@ function getOrCreateUser(userId, displayName, referrerId) {
   const existingRow = findUserRow(sheet, userId);
   
   if (existingRow) {
-    // 用戶已存在，返回資料
-    const row = sheet.getRange(existingRow, 1, 1, 8).getValues()[0];
+    // 用戶已存在，返回資料（9 欄）
+    const row = sheet.getRange(existingRow, 1, 1, 9).getValues()[0];
+    
+    // 如果沒有邀請碼，補上一個
+    let referralCode = row[8];
+    if (!referralCode) {
+      referralCode = generateReferralCode();
+      sheet.getRange(existingRow, 9).setValue(referralCode);
+    }
+    
     return {
       userId: row[0],
       displayName: row[1],
@@ -141,11 +158,13 @@ function getOrCreateUser(userId, displayName, referrerId) {
       referralCount: row[5],
       waitlistPaid: row[6],
       createdAt: row[7],
+      referralCode: referralCode,
       isNew: false
     };
   }
   
-  // 建立新用戶
+  // 建立新用戶（含邀請碼）
+  const referralCode = generateReferralCode();
   const newRow = [
     userId,
     displayName || '',
@@ -154,7 +173,8 @@ function getOrCreateUser(userId, displayName, referrerId) {
     referrerId || '',
     0,
     false,
-    new Date().toISOString()
+    new Date().toISOString(),
+    referralCode
   ];
   sheet.appendRow(newRow);
   
@@ -167,7 +187,69 @@ function getOrCreateUser(userId, displayName, referrerId) {
     referralCount: newRow[5],
     waitlistPaid: newRow[6],
     createdAt: newRow[7],
+    referralCode: newRow[8],
     isNew: true
+  };
+}
+
+// 透過邀請碼找用戶
+function findUserByCode(code) {
+  const sheet = getSheet();
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][8] && data[i][8].toUpperCase() === code.toUpperCase()) {
+      return {
+        row: i + 1,
+        userId: data[i][0],
+        displayName: data[i][1],
+        credits: data[i][2]
+      };
+    }
+  }
+  return null;
+}
+
+// 兌換邀請碼（新用戶輸入邀請碼，雙方各得 1 次額度）
+function redeemReferralCode(newUserId, code) {
+  const sheet = getSheet();
+  
+  // 找邀請人
+  const inviter = findUserByCode(code);
+  if (!inviter) {
+    return { success: false, error: '無效的邀請碼' };
+  }
+  
+  // 不能自己邀請自己
+  if (inviter.userId === newUserId) {
+    return { success: false, error: '不能使用自己的邀請碼' };
+  }
+  
+  // 檢查新用戶是否已被邀請過
+  const newUserRow = findUserRow(sheet, newUserId);
+  if (newUserRow) {
+    const referredBy = sheet.getRange(newUserRow, 5).getValue();
+    if (referredBy) {
+      return { success: false, error: '你已經使用過邀請碼了' };
+    }
+    
+    // 更新新用戶的 referredBy
+    sheet.getRange(newUserRow, 5).setValue(inviter.userId);
+    // 給新用戶 +1 額度
+    const newUserCredits = sheet.getRange(newUserRow, 3).getValue();
+    sheet.getRange(newUserRow, 3).setValue(newUserCredits + 1);
+  }
+  
+  // 給邀請人 +1 額度
+  const inviterCredits = sheet.getRange(inviter.row, 3).getValue();
+  sheet.getRange(inviter.row, 3).setValue(inviterCredits + 1);
+  // 邀請人邀請次數 +1
+  const referralCount = sheet.getRange(inviter.row, 6).getValue();
+  sheet.getRange(inviter.row, 6).setValue(referralCount + 1);
+  
+  return { 
+    success: true, 
+    inviterName: inviter.displayName || '神秘用戶',
+    message: `🎉 邀請碼兌換成功！你和 ${inviter.displayName || '邀請人'} 各獲得 1 次額度！`
   };
 }
 
@@ -275,14 +357,28 @@ function handleLineWebhook(events) {
 function handleMessageEvent(event) {
   const replyToken = event.replyToken;
   const message = event.message;
+  const userId = event.source.userId;
   
   if (message.type === 'text') {
-    // 使用者發送文字訊息
-    const userText = message.text.toLowerCase();
+    const userText = message.text.trim();
+    const upperText = userText.toUpperCase();
     
-    if (userText.includes('測字') || userText.includes('占卜') || userText.includes('算命')) {
+    // 檢查是否為 6 位邀請碼格式（只包含英數字）
+    if (/^[A-Z0-9]{6}$/.test(upperText)) {
+      // 嘗試兌換邀請碼
+      handleReferralCode(replyToken, userId, upperText);
+      return;
+    }
+    
+    // 使用者發送文字訊息
+    const lowerText = userText.toLowerCase();
+    
+    if (lowerText.includes('測字') || lowerText.includes('占卜') || lowerText.includes('算命')) {
       // 引導到 LIFF
       replyWithLiffLink(replyToken);
+    } else if (lowerText.includes('邀請碼') || lowerText.includes('序號') || lowerText.includes('我的碼')) {
+      // 查詢自己的邀請碼
+      showMyReferralCode(replyToken, userId);
     } else {
       // 一般訊息：引導使用
       replyWithWelcome(replyToken);
@@ -291,6 +387,93 @@ function handleMessageEvent(event) {
     // 使用者發送圖片：引導到 LIFF（因為需要問題）
     replyWithNeedQuestion(replyToken);
   }
+}
+
+// 處理邀請碼兌換
+function handleReferralCode(replyToken, userId, code) {
+  // 先確保用戶存在
+  getOrCreateUser(userId, '', '');
+  
+  const result = redeemReferralCode(userId, code);
+  
+  if (result.success) {
+    replyMessage(replyToken, [{
+      type: 'text',
+      text: result.message + '\n\n💡 輸入「測字」開始你的占卜之旅！'
+    }]);
+  } else {
+    replyMessage(replyToken, [{
+      type: 'text',
+      text: `❌ ${result.error}\n\n💡 如果你想測字，請輸入「測字」`
+    }]);
+  }
+}
+
+// 顯示用戶的邀請碼
+function showMyReferralCode(replyToken, userId) {
+  const user = getOrCreateUser(userId, '', '');
+  
+  replyMessage(replyToken, [{
+    type: 'flex',
+    altText: '你的專屬邀請碼',
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: '🎁 你的專屬邀請碼',
+            weight: 'bold',
+            size: 'lg',
+            color: '#fbbf24'
+          },
+          {
+            type: 'text',
+            text: user.referralCode,
+            weight: 'bold',
+            size: '3xl',
+            align: 'center',
+            margin: 'lg',
+            color: '#8b5cf6'
+          },
+          {
+            type: 'separator',
+            margin: 'lg'
+          },
+          {
+            type: 'text',
+            text: '分享給朋友，請他們：',
+            size: 'sm',
+            margin: 'lg',
+            color: '#9ca3af'
+          },
+          {
+            type: 'text',
+            text: '1️⃣ 加入測字大師好友',
+            size: 'sm',
+            color: '#9ca3af'
+          },
+          {
+            type: 'text',
+            text: '2️⃣ 輸入你的邀請碼',
+            size: 'sm',
+            color: '#9ca3af'
+          },
+          {
+            type: 'text',
+            text: '✨ 雙方各得 1 次額度！',
+            size: 'sm',
+            margin: 'md',
+            color: '#10b981'
+          }
+        ],
+        backgroundColor: '#1a1025',
+        paddingAll: '20px'
+      }
+    }
+  }]);
 }
 
 function handleFollowEvent(event) {
