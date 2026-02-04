@@ -434,10 +434,17 @@
                 </div>
             </section>
 
-            <!-- Test Button -->
+            <!-- Test Buttons -->
             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+                <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 10px;">🧪 測試區域</p>
+                <button id="btnTestUpload" class="btn btn-secondary"
+                    style="background: #10b981; margin-bottom: 8px; width: 100%;">📤 測試：上傳圖片到 GAS</button>
+                <button id="btnTestImageSend" class="btn btn-secondary"
+                    style="background: #3b82f6; margin-bottom: 8px; width: 100%;">📷 測試：傳送圖片到聊天室</button>
                 <button id="btnTestSend" class="btn btn-secondary" style="display: none; background: #ff6b6b;">🧪
                     測試：發送訊息到聊天室</button>
+                <pre id="testLog"
+                    style="background: #1a1025; color: #10b981; padding: 10px; border-radius: 8px; font-size: 11px; max-height: 150px; overflow-y: auto; white-space: pre-wrap; display: none;"></pre>
             </div>
         </div>
     </div>
@@ -984,7 +991,153 @@
             }
         });
 
-        // ====== TEST BUTTON ======
+        // ====== TEST BUTTONS ======
+        function testLog(msg) {
+            const log = document.getElementById('testLog');
+            log.style.display = 'block';
+            log.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // 測試上傳圖片到 GAS
+        document.getElementById('btnTestUpload').addEventListener('click', async () => {
+            const btn = document.getElementById('btnTestUpload');
+            btn.disabled = true;
+            btn.textContent = '上傳中...';
+            testLog('開始測試圖片上傳...');
+
+            try {
+                // 建立一個簡單的測試圖片 (紅色方塊)
+                const testCanvas = document.createElement('canvas');
+                testCanvas.width = 200;
+                testCanvas.height = 200;
+                const testCtx = testCanvas.getContext('2d');
+                testCtx.fillStyle = '#8b5cf6';
+                testCtx.fillRect(0, 0, 200, 200);
+                testCtx.fillStyle = '#fbbf24';
+                testCtx.font = '24px Arial';
+                testCtx.textAlign = 'center';
+                testCtx.fillText('測字大師', 100, 100);
+                testCtx.fillText('測試圖片', 100, 130);
+
+                const imgData = testCanvas.toDataURL('image/png');
+                const base64 = imgData.split(',')[1];
+                testLog(`圖片大小: ${(base64.length / 1024).toFixed(1)} KB`);
+
+                const response = await fetch(CONFIG.GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'uploadTempImage',
+                        imageBase64: base64
+                    })
+                });
+
+                const result = await response.json();
+                testLog(`回應: ${JSON.stringify(result)}`);
+
+                if (result.success) {
+                    testLog(`✅ 上傳成功！`);
+                    testLog(`圖片 URL: ${result.imageUrl}`);
+                    alert(`上傳成功！\n\n圖片連結:\n${result.imageUrl}`);
+                } else {
+                    testLog(`❌ 上傳失敗: ${result.error}`);
+                    alert(`上傳失敗: ${result.error}`);
+                }
+            } catch (err) {
+                testLog(`❌ 錯誤: ${err.message}`);
+                alert(`錯誤: ${err.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📤 測試：上傳圖片到 GAS';
+            }
+        });
+
+        // 測試傳送圖片到聊天室
+        document.getElementById('btnTestImageSend').addEventListener('click', async () => {
+            const btn = document.getElementById('btnTestImageSend');
+            btn.disabled = true;
+            btn.textContent = '處理中...';
+            testLog('開始測試傳送圖片到聊天室...');
+
+            try {
+                if (!liff.isInClient()) {
+                    testLog('❌ 不在 LINE App 內');
+                    alert('此功能只能在 LINE App 內使用');
+                    return;
+                }
+
+                // 1. 建立測試圖片
+                const testCanvas = document.createElement('canvas');
+                testCanvas.width = 400;
+                testCanvas.height = 300;
+                const testCtx = testCanvas.getContext('2d');
+
+                // 紫色漸層背景
+                const gradient = testCtx.createLinearGradient(0, 0, 400, 300);
+                gradient.addColorStop(0, '#1a0a2e');
+                gradient.addColorStop(1, '#2d1b4e');
+                testCtx.fillStyle = gradient;
+                testCtx.fillRect(0, 0, 400, 300);
+
+                // 文字
+                testCtx.fillStyle = '#fbbf24';
+                testCtx.font = 'bold 32px Arial';
+                testCtx.textAlign = 'center';
+                testCtx.fillText('🔮 測字大師', 200, 120);
+                testCtx.fillStyle = '#9ca3af';
+                testCtx.font = '18px Arial';
+                testCtx.fillText('圖片傳送測試', 200, 160);
+                testCtx.fillText(new Date().toLocaleString(), 200, 200);
+
+                const imgData = testCanvas.toDataURL('image/png');
+                const base64 = imgData.split(',')[1];
+                testLog(`圖片已建立, 大小: ${(base64.length / 1024).toFixed(1)} KB`);
+
+                // 2. 上傳圖片
+                testLog('上傳圖片到 GAS...');
+                const uploadResp = await fetch(CONFIG.GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'uploadTempImage',
+                        imageBase64: base64
+                    })
+                });
+
+                const uploadResult = await uploadResp.json();
+                testLog(`上傳結果: ${JSON.stringify(uploadResult)}`);
+
+                if (!uploadResult.success) {
+                    testLog(`❌ 上傳失敗: ${uploadResult.error}`);
+                    alert(`上傳失敗: ${uploadResult.error}`);
+                    return;
+                }
+
+                const imageUrl = uploadResult.imageUrl;
+                testLog(`✅ 圖片 URL: ${imageUrl}`);
+
+                // 3. 發送到聊天室
+                testLog('發送圖片到聊天室...');
+                await liff.sendMessages([{
+                    type: 'image',
+                    originalContentUrl: imageUrl,
+                    previewImageUrl: imageUrl
+                }]);
+
+                testLog('✅ 圖片已發送到聊天室！');
+                alert('✅ 圖片已發送到聊天室！');
+
+            } catch (err) {
+                testLog(`❌ 錯誤: ${err.message}`);
+                console.error('Test image send error:', err);
+                alert(`錯誤: ${err.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📷 測試：傳送圖片到聊天室';
+            }
+        });
+
         document.getElementById('btnTestSend').addEventListener('click', async () => {
             const btn = document.getElementById('btnTestSend');
             btn.disabled = true;
