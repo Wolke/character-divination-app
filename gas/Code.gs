@@ -29,21 +29,42 @@ function getTempFolder() {
 
 function saveTempImage(base64Data) {
   try {
+    console.log('saveTempImage 開始, 資料長度:', base64Data ? base64Data.length : 0);
+    
+    if (!base64Data) {
+      return { success: false, error: '沒有收到圖片資料' };
+    }
+    
     const folder = getTempFolder();
-    const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'image/png', `temp_${new Date().getTime()}.png`);
+    console.log('資料夾取得成功:', folder.getName());
+    
+    const decodedData = Utilities.base64Decode(base64Data);
+    console.log('Base64 解碼成功, 位元組:', decodedData.length);
+    
+    const blob = Utilities.newBlob(decodedData, 'image/png', `temp_${new Date().getTime()}.png`);
+    console.log('Blob 建立成功');
+    
     const file = folder.createFile(blob);
+    console.log('檔案建立成功, ID:', file.getId());
     
     // 設定公開檢視權限 (確保 LINE 可以讀取)
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    console.log('權限設定成功');
+    
+    const fileId = file.getId();
+    // 使用 Google Drive 直接連結格式 (LINE 需要 HTTPS 且可直接存取的 URL)
+    const imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    
+    console.log('圖片 URL:', imageUrl);
     
     return {
       success: true,
-      imageUrl: file.getDownloadUrl(), // 用於 LINE Image Message
-      fileId: file.getId()
+      imageUrl: imageUrl,
+      fileId: fileId
     };
   } catch (error) {
-    console.error('Save temp image error:', error);
-    return { success: false, error: '圖片上傳失敗' };
+    console.error('Save temp image error:', error.toString());
+    return { success: false, error: '圖片上傳失敗: ' + error.toString() };
   }
 }
 
