@@ -12,6 +12,65 @@ const LIFF_URL = PropertiesService.getScriptProperties().getProperty('LIFF_URL')
 const SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || '';
 const SHEET_NAME = 'Users';
 const INITIAL_CREDITS = 1; // 新用戶免費次數
+const TEMP_FOLDER_NAME = 'TempImages'; // 暫存圖片資料夾名稱
+
+// ====== 圖片自動清理機制 ======
+
+function getTempFolder() {
+  const folders = DriveApp.getFoldersByName(TEMP_FOLDER_NAME);
+  if (folders.hasNext()) {
+    return folders.next();
+  }
+  // 沒找到就建立
+  const folder = DriveApp.createFolder(TEMP_FOLDER_NAME);
+  folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return folder;
+}
+
+function saveTempImage(base64Data) {
+  try {
+    const folder = getTempFolder();
+    const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'image/png', `temp_${new Date().getTime()}.png`);
+    const file = folder.createFile(blob);
+    
+    // 設定公開檢視權限 (確保 LINE 可以讀取)
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    return {
+      success: true,
+      imageUrl: file.getDownloadUrl(), // 用於 LINE Image Message
+      fileId: file.getId()
+    };
+  } catch (error) {
+    console.error('Save temp image error:', error);
+    return { success: false, error: '圖片上傳失敗' };
+  }
+}
+
+function cleanOldImages() {
+  try {
+    const folder = getTempFolder();
+    const files = folder.getFiles();
+    const now = new Date().getTime();
+    const ONE_HOUR = 60 * 60 * 1000;
+    
+    let deletedCount = 0;
+    
+    while (files.hasNext()) {
+      const file = files.next();
+      const created = file.getDateCreated().getTime();
+      
+      // 刪除超過 1 小時的檔案
+      if (now - created > ONE_HOUR) {
+        file.setTrashed(true);
+        deletedCount++;
+      }
+    }
+    console.log(`已清理 ${deletedCount} 張舊圖片`);
+  } catch (error) {
+    console.error('Clean images error:', error);
+  }
+}
 
 // ====== 用戶資料庫函數 ======
 
@@ -399,6 +458,14 @@ function handleLiffRequest(data) {
       // 取得剩餘額度
       const creditsResult = getUserCredits(userId);
       return createJsonResponse({ success: true, credits: creditsResult.credits });
+      
+    case 'uploadTempImage':
+      // 上傳暫存圖片
+      if (!imageBase64) {
+        return createJsonResponse({ success: false, error: '請提供圖片' });
+      }
+      const uploadResult = saveTempImage(imageBase64);
+      return createJsonResponse(uploadResult);
       
     default:
       // 舊版 API 相容：直接執行測字（不扣額度，給測試用）

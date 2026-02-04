@@ -717,12 +717,48 @@
             if (!liff.isInClient()) return;
 
             try {
+                // 1. 上傳圖片到 GAS 取得公開連結
+                const imgData = canvas.toDataURL('image/png');
+                const base64 = imgData.split(',')[1];
+
+                let imageUrl = null;
+
+                try {
+                    const uploadResp = await fetch(CONFIG.GAS_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'uploadTempImage',
+                            imageBase64: base64
+                        })
+                    });
+                    const uploadResult = await uploadResp.json();
+                    if (uploadResult.success) {
+                        imageUrl = uploadResult.imageUrl;
+                    }
+                } catch (e) {
+                    console.error('Image upload failed:', e);
+                }
+
+                // 2. 準備訊息
                 const summary = interpretation
                     .replace(/[#*]/g, '')
                     .replace(/\s+/g, ' ')
                     .substring(0, 500);
 
-                await liff.sendMessages([{
+                const messages = [];
+
+                // 如果有圖片連結，先傳送圖片
+                if (imageUrl) {
+                    messages.push({
+                        type: 'image',
+                        originalContentUrl: imageUrl,
+                        previewImageUrl: imageUrl
+                    });
+                }
+
+                // 傳送 Flex Message
+                messages.push({
                     type: 'flex',
                     altText: '🔮 測字大師解讀結果',
                     contents: {
@@ -810,8 +846,9 @@
                             paddingAll: '15px'
                         }
                     }
-                }]);
+                });
 
+                await liff.sendMessages(messages);
                 console.log('已自動發送結果到聊天室');
             } catch (err) {
                 console.error('自動發送失敗:', err);
