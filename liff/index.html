@@ -434,8 +434,8 @@
                 </div>
             </section>
 
-            <!-- Test Buttons -->
-            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+            <!-- Test Buttons (hidden) -->
+            <div style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
                 <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 10px;">🧪 測試區域</p>
                 <button id="btnTestUpload" class="btn btn-secondary"
                     style="background: #10b981; margin-bottom: 8px; width: 100%;">📤 測試：上傳圖片到 GAS</button>
@@ -871,10 +871,10 @@
         // ====== SHARE ======
         btnShare.addEventListener('click', async () => {
             btnShare.disabled = true;
-            btnShare.textContent = '截圖中...';
+            btnShare.textContent = '處理中...';
 
             try {
-                // 截圖整個結果區域
+                // 1. 截圖整個結果區域
                 const shareArea = document.getElementById('shareArea');
                 const screenshotCanvas = await html2canvas(shareArea, {
                     backgroundColor: '#0f0a1a',
@@ -882,23 +882,115 @@
                     useCORS: true
                 });
 
-                // 轉換成 Blob
-                const blob = await new Promise(resolve =>
-                    screenshotCanvas.toBlob(resolve, 'image/png')
-                );
-                const file = new File([blob], '測字結果.png', { type: 'image/png' });
+                btnShare.textContent = '上傳中...';
+
+                // 2. 上傳圖片到 GAS
+                const base64 = screenshotCanvas.toDataURL('image/png').split(',')[1];
+                let imageUrl = null;
+
+                try {
+                    const uploadResp = await fetch(CONFIG.GAS_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'uploadTempImage',
+                            imageBase64: base64
+                        })
+                    });
+                    const uploadResult = await uploadResp.json();
+                    if (uploadResult.success) {
+                        imageUrl = uploadResult.imageUrl;
+                    }
+                } catch (e) {
+                    console.error('Image upload failed:', e);
+                }
 
                 btnShare.textContent = '分享中...';
 
-                // 優先使用 Web Share API（支援直接分享圖片檔案）
-                if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                        title: '🔮 測字大師',
-                        text: `問題：${question}\n\n👉 來試試看：https://liff.line.me/${CONFIG.LIFF_ID}`,
-                        files: [file]
+                // 3. 使用 shareTargetPicker 分享
+                if (liff.isApiAvailable('shareTargetPicker')) {
+                    const messages = [];
+
+                    // 如果有圖片，加入圖片訊息
+                    if (imageUrl) {
+                        messages.push({
+                            type: 'image',
+                            originalContentUrl: imageUrl,
+                            previewImageUrl: imageUrl
+                        });
+                    }
+
+                    // 加入 Flex Message
+                    messages.push({
+                        type: 'flex',
+                        altText: '🔮 測字大師解讀結果',
+                        contents: {
+                            type: 'bubble',
+                            size: 'mega',
+                            header: {
+                                type: 'box',
+                                layout: 'vertical',
+                                contents: [{
+                                    type: 'text',
+                                    text: '🔮 測字大師',
+                                    weight: 'bold',
+                                    size: 'xl',
+                                    color: '#fbbf24'
+                                }],
+                                backgroundColor: '#0f0a1a',
+                                paddingAll: '15px'
+                            },
+                            body: {
+                                type: 'box',
+                                layout: 'vertical',
+                                contents: [
+                                    {
+                                        type: 'text',
+                                        text: '📝 ' + question,
+                                        weight: 'bold',
+                                        size: 'md',
+                                        wrap: true
+                                    },
+                                    {
+                                        type: 'separator',
+                                        margin: 'lg'
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: '我剛用 AI 測字解答了一個問題，來試試看吧！',
+                                        size: 'sm',
+                                        wrap: true,
+                                        margin: 'lg',
+                                        color: '#9ca3af'
+                                    }
+                                ],
+                                backgroundColor: '#1a1025',
+                                paddingAll: '20px'
+                            },
+                            footer: {
+                                type: 'box',
+                                layout: 'vertical',
+                                contents: [
+                                    {
+                                        type: 'button',
+                                        action: {
+                                            type: 'uri',
+                                            label: '我也要測字',
+                                            uri: `https://liff.line.me/${CONFIG.LIFF_ID}`
+                                        },
+                                        style: 'primary',
+                                        color: '#8b5cf6'
+                                    }
+                                ],
+                                backgroundColor: '#0f0a1a',
+                                paddingAll: '15px'
+                            }
+                        }
                     });
+
+                    await liff.shareTargetPicker(messages);
                 } else {
-                    // 不支援 Web Share：下載圖片
+                    // Fallback: 下載圖片
                     const link = document.createElement('a');
                     link.download = '測字結果.png';
                     link.href = screenshotCanvas.toDataURL();
@@ -906,7 +998,6 @@
                     alert('圖片已下載！請手動分享給朋友');
                 }
             } catch (err) {
-                // 用戶取消分享不算錯誤
                 if (err.name !== 'AbortError') {
                     console.error('Share error:', err);
                     alert('分享失敗：' + (err.message || '請重試'));
